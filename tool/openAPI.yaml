@@ -1,0 +1,57 @@
+openapi: 3.0.0
+
+info:
+  version: 0.0.1
+  title: Hello OpenAPI
+  description: A simple API to learn how to write OpenAPI Specification
+
+servers:
+  - url: http://localhost:8080
+    description: Localhost testing
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+paths:
+  /login:
+    post:
+      summary: User Login
+      description: Login user with given credentials
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+
+      responses:
+        '200':    # status code
+          description: Successful login
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: I'm now logged in as XXX
+
+  /authenticated/foo:
+    get:
+      summary: Authenticated endpoint check
+      security:
+        - bearerAuth: []
+      responses:
+              '200':    # status code
+                description: Credentials OK test
+                content:
+                  text/plain:
+                    schema:
+                      type: string
+                      example: Doing foo as XXX
