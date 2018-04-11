@@ -8,8 +8,12 @@ environment:
 
 dependencies:
   args: ^0.13.7
+  logging: ^0.11.3+1
   shelf: ^0.6.0
-  shelf_auth: ^0.7.4
+  shelf_auth:
+    git:
+      url: https://bitbucket.org/BenjaminThong/shelf_auth.git
+      ref: jaguar_jwt
   shelf_cors: ^0.2.1
   shelf_exception_handler: ^0.1.0
   shelf_route: 0.14.3
