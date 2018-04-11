@@ -65,7 +65,7 @@ void main() {
 
   // use Jwt based sessions. Create the secret using a UUID
   var sessionHandler = new JwtSessionHandler(
-      'super app', new Uuid().v4(), testLookup.lookupByUsername);
+      'super app', new Uuid().v4(), testLookup.lookupByUniqueId);
 
   // allow http for testing with curl. Don't use in production
   // i.e. in addition to https, allow non-https too
@@ -73,7 +73,7 @@ void main() {
 
   // authentication middleware for a login handler (e.g. submitted from a form)
   var loginMiddleware = authenticate(
-      [new UsernamePasswordAuthenticator(testLookup.lookupByUsernamePassword)],
+      [new UsernamePasswordAuthenticator(testLookup.lookupByUniqueIdPassword)],
       sessionHandler: sessionHandler,
       allowHttp: allowHttp,
       allowAnonymousAccess: false);
@@ -85,7 +85,7 @@ void main() {
   // We are disabling anonymous access to these routes
   var defaultAuthMiddleware = authenticate([],
       sessionHandler: sessionHandler,
-      allowHttp: true,
+      allowHttp: allowHttp,
       allowAnonymousAccess: false);
 
   var rootRouter = router();
@@ -94,7 +94,7 @@ void main() {
   rootRouter.post(
       '/login',
           (Request request) => new Response.ok(
-          "I'm now logged in as ${loggedInUsername(request)}\n"),
+          "I'm now logged in as ${loggedInUniqueId(request)}\n"),
       middleware: loginMiddleware);
 
   // the routes which require an authenticated user
@@ -102,7 +102,7 @@ void main() {
     ..get(
         '/foo',
             (Request request) =>
-        new Response.ok("Doing foo as ${loggedInUsername(request)}\n"));
+        new Response.ok("Doing foo as ${loggedInUniqueId(request)}\n"));
 
   printRoutes(rootRouter);
 
@@ -117,26 +117,26 @@ void main() {
   });
 }
 
-String loggedInUsername(Request request) => getAuthenticatedContext(request)
-    .map((ac) => ac.principal.name)
+String loggedInUniqueId(Request request) => getAuthenticatedContext(request)
+    .map((ac) => ac.principal.uniqueId)
     .getOrElse(() => 'guest');
 
 class TestUserLookup {
-  Future<Option<Principal>> lookupByUsernamePassword(
-      String username, String password) {
-    final validUser = username == 'fred';
+  Future<Option<Principal>> lookupByUniqueIdPassword(
+      String uniqueId, String password) {
+    final validUser = uniqueId == 'fred';
 
     final Option<Principal> principalOpt =
-    validUser ? new Some(new Principal(username)) : const None();
+    validUser ? new Some(new Principal(uniqueId)) : const None();
 
     return new Future.value(principalOpt);
   }
 
-  Future<Option<Principal>> lookupByUsername(String username) {
-    final validUser = username == 'fred';
+  Future<Option<Principal>> lookupByUniqueId(String uniqueId) {
+    final validUser = uniqueId == 'fred';
 
     final Option<Principal> principalOpt =
-    validUser ? new Some(new Principal(username)) : const None();
+    validUser ? new Some(new Principal(uniqueId)) : const None();
 
     return new Future.value(principalOpt);
   }
