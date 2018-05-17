@@ -8,12 +8,38 @@ import 'package:option/option.dart';
 import 'package:uuid/uuid.dart';
 import 'package:logging/logging.dart';
 import 'package:shelf_route/shelf_route.dart';
+import 'package:jaguar_jwt/jaguar_jwt.dart';
 
 final corsHeaders = {
   'Access-Control-Allow-Origin': "*",
   'Access-Control-Allow-Methods': "POST, GET, OPTIONS, DELETE, HEAD",
   'Access-Control-Allow-Headers': "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 };
+
+const Duration gIdleTimeout = const Duration(days: 3);
+const Duration gTotalSessionTimeout = const Duration(days: 3650);
+const String gSecret = 'SomeUberSecureSecret';
+
+// for login authentication
+Future<Option<Principal>> idPasswordToPrincipal(
+    String uniqueId, String password) {
+  final validUser = uniqueId == 'fred';
+
+  final Option<Principal> principalOpt =
+  validUser ? new Some(new Principal(uniqueId)) : const None();
+
+  return new Future.value(principalOpt);
+}
+
+// to return Principal from login token
+Future<Option<Principal>> jwtClaimToPrincipal(JwtClaim claimSet) {
+  final validUser = claimSet.subject == 'fred';
+
+  final Option<Principal> principalOpt =
+  validUser ? new Some(new Principal.fromMap(claimSet.payload)) : const None();
+
+  return new Future.value(principalOpt);
+}
 
 /**
  * This example has a login route where username and password are POSTed
@@ -29,7 +55,7 @@ final corsHeaders = {
  *     HTTP/1.1 200 OK
  *      date: Fri, 06 Feb 2015 23:45:39 GMT
  *      transfer-encoding: chunked
- *      authorization: ShelfAuthJwtSession eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjYzMzksImV4cCI6MTQyMzI2ODEzOSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.Og4r1DnW6nOm1Ms5Vr9qiSePbL43Xt0DUVj3KwJT_38
+ *      authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjYzMzksImV4cCI6MTQyMzI2ODEzOSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.Og4r1DnW6nOm1Ms5Vr9qiSePbL43Xt0DUVj3KwJT_38
  *      x-frame-options: SAMEORIGIN
  *      content-type: text/plain; charset=utf-8
  *      x-xss-protection: 1; mode=block
@@ -38,14 +64,14 @@ final corsHeaders = {
  *
  * copy the authorization line and use in the following curl
  *
- *     curl -i  'http://localhost:8080/authenticated/foo' -H 'content-type: application/json' -H 'authorization: ShelfAuthJwtSession eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjYzMzksImV4cCI6MTQyMzI2ODEzOSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.Og4r1DnW6nOm1Ms5Vr9qiSePbL43Xt0DUVj3KwJT_38'
+ *     curl -i  'http://localhost:8080/authenticated/foo' -H 'content-type: application/json' -H 'authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjYzMzksImV4cCI6MTQyMzI2ODEzOSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.Og4r1DnW6nOm1Ms5Vr9qiSePbL43Xt0DUVj3KwJT_38'
  *
  * You should see a response like
  *
  *     HTTP/1.1 200 OK
  *     date: Fri, 06 Feb 2015 23:57:51 GMT
  *     transfer-encoding: chunked
- *     authorization: ShelfAuthJwtSession eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjcwNzEsImV4cCI6MTQyMzI2ODg3MSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.0DtXFz4S0cg8aKRtc_ieAhzubfco3ioK1Uh7efEc26Y
+ *     authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjMyNjcwNzEsImV4cCI6MTQyMzI2ODg3MSwiaXNzIjoic3VwZXIgYXBwIiwic3ViIjoiZnJlZCIsImF1ZCI6bnVsbCwidHNlIjoxNDIzMzUyNzM5fQ.0DtXFz4S0cg8aKRtc_ieAhzubfco3ioK1Uh7efEc26Y
  *     x-frame-options: SAMEORIGIN
  *     content-type: text/plain; charset=utf-8
  *     x-xss-protection: 1; mode=block
@@ -61,11 +87,34 @@ void main() {
     print('${lr.time} ${lr.level} ${lr.message}');
   });
 
-  var testLookup = new TestUserLookup();
+
 
   // use Jwt based sessions. Create the secret using a UUID
-  var sessionHandler = new JwtSessionHandler(
-      'super app', new Uuid().v4(), testLookup.lookupByUniqueId);
+  var sessionHandler = new JwtSessionHandler.custom(
+    'super app issuer', // issuer
+    gSecret, // secret
+    // claim to principal
+    (JwtClaim claimsSet) => jwtClaimToPrincipal(claimsSet),
+    // principal and metadata to claim
+    (String issuer,
+      Principal principal,
+      String sessionIdentifier,
+      Duration idleTimeout,
+      Duration totalSessionTimeout) =>
+        new Future<JwtClaim>.value(new SlidingWindowJwtClaim(
+            subject: principal.uniqueId,
+            issuer: issuer,
+            audience: <String>[],
+            jwtId: sessionIdentifier,
+            maxAge: totalSessionTimeout,
+            slidingWindowExpiry: new DateTime.now().toUtc().add(gIdleTimeout),
+            payload: principal.toMap())),
+    idleTimeout: gIdleTimeout,
+    totalSessionTimeout: gTotalSessionTimeout,
+    createSessionId: () => new Uuid().v1(),
+    // jwt claim <-> bearer token
+    jwtCodec: new JwtCodec.fromKey('secret'),
+  );
 
   // allow http for testing with curl. Don't use in production
   // i.e. in addition to https, allow non-https too
@@ -73,7 +122,7 @@ void main() {
 
   // authentication middleware for a login handler (e.g. submitted from a form)
   var loginMiddleware = authenticate(
-      [new UsernamePasswordAuthenticator(testLookup.lookupByUniqueIdPassword)],
+      [new UsernamePasswordAuthenticator(idPasswordToPrincipal)],
       sessionHandler: sessionHandler,
       allowHttp: allowHttp,
       allowAnonymousAccess: false);
@@ -120,24 +169,3 @@ void main() {
 String loggedInUniqueId(Request request) => getAuthenticatedContext(request)
     .map((ac) => ac.principal.uniqueId)
     .getOrElse(() => 'guest');
-
-class TestUserLookup {
-  Future<Option<Principal>> lookupByUniqueIdPassword(
-      String uniqueId, String password) {
-    final validUser = uniqueId == 'fred';
-
-    final Option<Principal> principalOpt =
-    validUser ? new Some(new Principal(uniqueId)) : const None();
-
-    return new Future.value(principalOpt);
-  }
-
-  Future<Option<Principal>> lookupByUniqueId(String uniqueId) {
-    final validUser = uniqueId == 'fred';
-
-    final Option<Principal> principalOpt =
-    validUser ? new Some(new Principal(uniqueId)) : const None();
-
-    return new Future.value(principalOpt);
-  }
-}
